@@ -2,7 +2,10 @@ import supertest from "supertest";
 import app from "../src/app";
 import { v4 as uuid } from "uuid";
 import { prisma } from "../src/database";
-import { recommendationFactory } from "./factories/recommendationFactory";
+import {
+  insertRecommendation,
+  recommendationFactory,
+} from "./factories/recommendationFactory";
 
 const agent = supertest(app);
 
@@ -53,6 +56,21 @@ describe("Recommendation General", () => {
   });
 
   describe("POST /recommendations/:id/upvote", () => {
-    it("should add one unit to recommendation score and persist", () => {});
+    it("should add one unit to recommendation score and persist", async () => {
+      const dbRecommendation = await insertRecommendation();
+
+      const { id } = dbRecommendation;
+
+      await agent.post(`/recommendations/${id}/upvote`);
+
+      const updatedDbRecommendation = await prisma.recommendation.findUnique({
+        where: { name: dbRecommendation.name },
+        select: { score: true },
+      });
+
+      const { score } = updatedDbRecommendation;
+
+      expect(score).toEqual(1);
+    });
   });
 });
