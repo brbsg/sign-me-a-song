@@ -2,6 +2,9 @@ import supertest from "supertest";
 import app from "../src/app";
 import { v4 as uuid } from "uuid";
 import { prisma } from "../src/database";
+import { recommendationFactory } from "./factories/recommendationFactory";
+
+const agent = supertest(app);
 
 describe("Recommendation General", () => {
   beforeEach(async () => {
@@ -14,12 +17,9 @@ describe("Recommendation General", () => {
 
   describe("POST recommendations", () => {
     it("should return 201 when inserting a new recommendation", async () => {
-      const recommendation = {
-        name: "Falamansa - Xote dos Milagresdd" + uuid(),
-        youtubeLink: "https://www.youtube.com/watch?v=chwyjJbcs1Y",
-      };
+      const recommendation = recommendationFactory();
 
-      const response = await supertest(app)
+      const response = await agent
         .post("/recommendations/")
         .send(recommendation);
 
@@ -43,7 +43,7 @@ describe("Recommendation General", () => {
         badRecommendation[key] =
           typeof badRecommendation[key] === "string" ? 15 : "banana";
 
-        const response = await supertest(app)
+        const response = await agent
           .post("/recommendations/")
           .send(badRecommendation);
 
@@ -53,6 +53,6 @@ describe("Recommendation General", () => {
   });
 
   describe("POST /recommendations/:id/upvote", () => {
-    it("should add one unit to recommendation score", () => {});
+    it("should add one unit to recommendation score and persist", () => {});
   });
 });
