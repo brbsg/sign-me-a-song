@@ -73,4 +73,40 @@ describe("Recommendation General", () => {
       expect(score).toEqual(1);
     });
   });
+
+  describe("POST /recommendations/:id/downvote", () => {
+    it("should subtract one unit to recommendation score and persist", async () => {
+      const dbRecommendation = await insertRecommendation();
+
+      const { id } = dbRecommendation;
+
+      await agent.post(`/recommendations/${id}/downvote`);
+
+      const updatedDbRecommendation = await prisma.recommendation.findUnique({
+        where: { name: dbRecommendation.name },
+        select: { score: true },
+      });
+
+      const { score } = updatedDbRecommendation;
+
+      expect(score).toEqual(-1);
+    });
+
+    it("should delete recommendation after six downvotes", async () => {
+      const persistedRecommendation = await insertRecommendation();
+      const { id } = persistedRecommendation;
+
+      for (let i = 0; i <= 6; i++) {
+        console.log(i);
+
+        await supertest(app).post(`/recommendations/${id}/downvote`);
+      }
+
+      const dbRecommendation = await prisma.recommendation.findFirst({
+        where: { id },
+      });
+
+      expect(dbRecommendation).toBeNull();
+    });
+  });
 });

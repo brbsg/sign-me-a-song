@@ -4,7 +4,7 @@ import { prisma } from "../../src/database";
 
 export function recommendationFactory(): CreateRecommendationData {
   return {
-    name: `${faker.music.genre()} ${faker.internet.password()}`,
+    name: `${faker.music.genre()}`,
     youtubeLink: "https://www.youtube.com/watch?v=iuvnaext7EU",
   };
 }
