@@ -9,7 +9,7 @@ import {
 
 const agent = supertest(app);
 
-describe("Recommendation General", () => {
+describe("POST recommendations", () => {
   beforeEach(async () => {
     await prisma.$executeRaw`TRUNCATE TABLE recommendations`;
   });
@@ -18,95 +18,114 @@ describe("Recommendation General", () => {
     await prisma.$disconnect();
   });
 
-  describe("POST recommendations", () => {
-    it("should return 201 when inserting a new recommendation", async () => {
-      const recommendation = recommendationFactory();
+  it("should return 201 when inserting a new recommendation", async () => {
+    const recommendation = recommendationFactory();
+
+    const response = await agent.post("/recommendations/").send(recommendation);
+
+    const dbRecommendation = await prisma.recommendation.findUnique({
+      where: { name: recommendation.name },
+    });
+
+    expect(response.status).toEqual(201);
+    expect(recommendation.name).toEqual(dbRecommendation.name);
+  });
+
+  it("should return 422 when inserting a wrong recommendation schema", async () => {
+    const recommendation = {
+      name: "uuid()",
+      youtubeLink: "https://www.youtube.com/watch?v=chwyjJbcs1Y",
+    };
+
+    for (let key in recommendation) {
+      const badRecommendation = { ...recommendation };
+
+      badRecommendation[key] =
+        typeof badRecommendation[key] === "string" ? 15 : "banana";
 
       const response = await agent
         .post("/recommendations/")
-        .send(recommendation);
+        .send(badRecommendation);
 
-      const dbRecommendation = await prisma.recommendation.findUnique({
-        where: { name: recommendation.name },
-      });
+      expect(response.status).toEqual(422);
+    }
+  });
+});
 
-      expect(response.status).toEqual(201);
-      expect(recommendation.name).toEqual(dbRecommendation.name);
+describe("POST /recommendations/:id/upvote", () => {
+  it("should add one unit to recommendation score and persist", async () => {
+    const dbRecommendation = await insertRecommendation();
+
+    const { id } = dbRecommendation;
+
+    await agent.post(`/recommendations/${id}/upvote`);
+
+    const updatedDbRecommendation = await prisma.recommendation.findUnique({
+      where: { name: dbRecommendation.name },
+      select: { score: true },
     });
 
-    it("should return 422 when inserting a wrong recommendation schema", async () => {
-      const recommendation = {
-        name: "uuid()",
-        youtubeLink: "https://www.youtube.com/watch?v=chwyjJbcs1Y",
-      };
+    const { score } = updatedDbRecommendation;
 
-      for (let key in recommendation) {
-        const badRecommendation = { ...recommendation };
+    expect(score).toEqual(1);
+  });
+});
 
-        badRecommendation[key] =
-          typeof badRecommendation[key] === "string" ? 15 : "banana";
+describe("POST /recommendations/:id/downvote", () => {
+  it("should subtract one unit to recommendation score and persist", async () => {
+    const dbRecommendation = await insertRecommendation();
 
-        const response = await agent
-          .post("/recommendations/")
-          .send(badRecommendation);
+    const { id } = dbRecommendation;
 
-        expect(response.status).toEqual(422);
-      }
+    await agent.post(`/recommendations/${id}/downvote`);
+
+    const updatedDbRecommendation = await prisma.recommendation.findUnique({
+      where: { name: dbRecommendation.name },
+      select: { score: true },
     });
+
+    const { score } = updatedDbRecommendation;
+
+    expect(score).toEqual(-1);
   });
 
-  describe("POST /recommendations/:id/upvote", () => {
-    it("should add one unit to recommendation score and persist", async () => {
-      const dbRecommendation = await insertRecommendation();
+  it("should delete recommendation after six downvotes", async () => {
+    const dbRecommendation = await insertRecommendation();
+    const { id } = dbRecommendation;
 
-      const { id } = dbRecommendation;
+    for (let i = 0; i <= 6; i++) {
+      console.log(i);
 
-      await agent.post(`/recommendations/${id}/upvote`);
+      await supertest(app).post(`/recommendations/${id}/downvote`);
+    }
 
-      const updatedDbRecommendation = await prisma.recommendation.findUnique({
-        where: { name: dbRecommendation.name },
-        select: { score: true },
-      });
-
-      const { score } = updatedDbRecommendation;
-
-      expect(score).toEqual(1);
+    const dbRecommendation = await prisma.recommendation.findFirst({
+      where: { id },
     });
+
+    expect(dbRecommendation).toBeNull();
   });
+});
 
-  describe("POST /recommendations/:id/downvote", () => {
-    it("should subtract one unit to recommendation score and persist", async () => {
-      const dbRecommendation = await insertRecommendation();
+describe("GET /recommendations", () => {
+  it("should return the last 10 recommendations in descending order", async () => {
+    const response = await supertest(app).get("/recommendations");
 
-      const { id } = dbRecommendation;
+    const firstRecommendation = response.body[0];
+    const secondRecommendation = response.body[1];
 
-      await agent.post(`/recommendations/${id}/downvote`);
+    expect(secondRecommendation.id).toBeLessThan(firstRecommendation.id);
+  });
+});
 
-      const updatedDbRecommendation = await prisma.recommendation.findUnique({
-        where: { name: dbRecommendation.name },
-        select: { score: true },
-      });
+describe("GET /recommendations/:id", () => {
+  it("should return recommendation given valid id", async () => {
+    const dbRecommendation = await insertRecommendation();
+    const id = dbRecommendation.id;
 
-      const { score } = updatedDbRecommendation;
+    const response = await supertest(app).get(`/recommendations/${id}`);
+    const returnedRecommendation = response.body;
 
-      expect(score).toEqual(-1);
-    });
-
-    it("should delete recommendation after six downvotes", async () => {
-      const persistedRecommendation = await insertRecommendation();
-      const { id } = persistedRecommendation;
-
-      for (let i = 0; i <= 6; i++) {
-        console.log(i);
-
-        await supertest(app).post(`/recommendations/${id}/downvote`);
-      }
-
-      const dbRecommendation = await prisma.recommendation.findFirst({
-        where: { id },
-      });
-
-      expect(dbRecommendation).toBeNull();
-    });
+    expect(returnedRecommendation).toMatchObject(dbRecommendation);
   });
 });
