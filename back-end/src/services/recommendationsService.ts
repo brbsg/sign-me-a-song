@@ -77,6 +77,8 @@ export const recommendationService = {
   upvote,
   downvote,
   getRandom,
+  getByScore,
+  getScoreFilter,
   get,
   getById,
   getTop,

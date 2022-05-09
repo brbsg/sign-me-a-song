@@ -1,11 +1,12 @@
 import supertest from "supertest";
-import app from "../src/app";
+import app from "../../src/app";
 import { v4 as uuid } from "uuid";
-import { prisma } from "../src/database";
+import { prisma } from "../../src/database";
 import {
   insertRecommendation,
   recommendationFactory,
-} from "./factories/recommendationFactory";
+} from "../factories/recommendationFactory";
+import faker from "@faker-js/faker";
 
 const agent = supertest(app);
 
@@ -94,16 +95,14 @@ describe("POST /recommendations/:id/downvote", () => {
     const { id } = dbRecommendation;
 
     for (let i = 0; i <= 6; i++) {
-      console.log(i);
-
       await supertest(app).post(`/recommendations/${id}/downvote`);
     }
 
-    const dbRecommendation = await prisma.recommendation.findFirst({
+    const dbRecommendationTest = await prisma.recommendation.findFirst({
       where: { id },
     });
 
-    expect(dbRecommendation).toBeNull();
+    expect(dbRecommendationTest).toBeNull();
   });
 });
 
@@ -121,11 +120,36 @@ describe("GET /recommendations", () => {
 describe("GET /recommendations/:id", () => {
   it("should return recommendation given valid id", async () => {
     const dbRecommendation = await insertRecommendation();
-    const id = dbRecommendation.id;
+    const { id } = dbRecommendation;
 
     const response = await supertest(app).get(`/recommendations/${id}`);
     const returnedRecommendation = response.body;
 
     expect(returnedRecommendation).toMatchObject(dbRecommendation);
+  });
+});
+
+describe("GET /recommendations/random", () => {
+  it("should return a recommendation", async () => {
+    const response = await supertest(app).get("/recommendations/random");
+
+    console.log(response.body);
+
+    expect(response.status).toEqual(200);
+    expect(response.body).toHaveProperty("id");
+  });
+});
+
+describe("GET /recommendations/top/:amount", () => {
+  it("should return the top x musics ordered by score", async () => {
+    const amount = faker.datatype.number({ min: 2, max: 4 });
+
+    const response = await supertest(app).get(`/recommendations/top/${amount}`);
+
+    expect(response.status).toEqual(200);
+    expect(response.body.length).toEqual(amount);
+    expect(response.body[0].score).toBeGreaterThanOrEqual(
+      response.body[1].score
+    );
   });
 });
